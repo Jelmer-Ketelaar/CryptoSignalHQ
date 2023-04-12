@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>CryptoSignalHQ</title>
+    <style>
+        /* Global Styles */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        a {
+            text-decoration: none;
+            color: #333;
+        }
+
+        img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* Header Styles */
+        .site-header {
+            background-color: #fff;
+            padding: 10px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 999;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .brand-logo img {
+            height: 50px;
+        }
+
+        .site-menu-main {
+            list-style: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 0;
+            padding: 0;
+        }
+
+        .site-menu-main li {
+            margin: 0 10px;
+        }
+
+        .site-menu-main li:last-child {
+            margin-right: 0;
+        }
+
+        .header-btn a {
+            background-color: #0c78d1;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+        }
+
+        .header-btn a:hover {
+            background-color: #064f8c;
+        }
+
+        .mobile-menu-trigger {
+            display: block;
+            width: 30px;
+            height: 20px;
+            position: relative;
+            cursor: pointer;
+            z-index: 999;
+        }
+
+        .mobile-menu-trigger span {
+            display: block;
+            width: 100%;
+            height: 2px;
+            background-color: #0c78d1;
+            position: absolute;
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+            transition: all 0.3s ease;
+        }
+
+        .mobile-menu-trigger span:before, .mobile-menu-trigger span:after {
+            content: '';
+            display: block;
+            width: 100%;
+            height: 100%;
+            background-color: #0c78d1;
+            position: absolute;
+            left: 0;
+            transition: all 0.3s ease;
+        }
+
+        .mobile-menu-trigger span:before {
+            top: -8px;
+        }
+
+        .mobile-menu-trigger span:after {
+            bottom: -8px;
+        }
+
+        .mobile-menu-trigger.active span {
+            background-color: transparent;
+        }
+
+        .mobile-menu-trigger.active span:before {
+            transform: rotate(45deg);
+            top: 0;
+        }
+
+        .mobile-menu-trigger.active span:after {
+            transform: rotate(-45deg);
+            bottom: 0;
+        }
+
+        .menu-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 998;
+        }
+
+        .menu-block {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            background-color: #fff;
+            width: 200px;
+            z-index: 999;
+            overflow-y: auto;
+            padding: 20px;
+            transform: translateX(-200px);
+            transition: all 0.3s ease;
+        }
+
+        .menu-block li {
+            margin: 10px 0;
+        }
+
+        .menu-block li:first-child {
+            margin-top: 0;
+        }
+
+        .menu-block li:last-child {
+            margin-bottom: 0;
+        }
+
+        .menu-block.active {
+            transform: translateX(0);
+        }
+
+        .mobile-menu-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .go-back {
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        .current-menu-title {
+            font-size: 18px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin: 0;
+        }
+
+        .mobile-menu-close {
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        /* Hero Section Styles */
+        .fugu-hero-section {
+            background-color: #f2f2f2;
+            padding: 100px 0;
+        }
+
+        .fugu-hero-content h1 {
+            font-size: 48px;
+            font-weight: bold;
+            margin-bottom: 30px;
+        }
+
+        .fugu-hero-content p {
+            font-size: 24px;
+            line-height: 1.5;
+            margin-bottom: 30px;
+        }
+
+        .fugu-hero-client-area {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .fugu-hero-client-data h3 {
+            font-size: 48px;
+            font-weight: bold;
+            margin: 0;
+        }
+
+        .fugu-hero-client-data p {
+            font-size: 24px;
+            margin: 0;
+        }
+
+        .fugu-hero-client-rating h3 {
+            font-size: 48px;
+            font-weight: bold;
+            margin: 0;
+        }
+
+        .fugu-hero-client-rating ul {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            margin: 0;
+            padding: 0;
+        }
+
+        .fugu-hero-client-rating li {
+            margin: 0 5px;
+        }
+
+        .fugu-hero-client-rating li:last-child {
+            margin-right: 0;
+        }
+
+        .fugu-hero-star {
+            position: absolute;
+            top: -80px;
+            right: -80px;
+        }
+
+        .fugu-hero-thumb {
+            position: relative;
+        }
+
+        .fugu-shape2 {
+            position: absolute;
+            bottom: -80px;
+            left: -80px;
+        }
+
+        .fugu-shape1 {
+            position: absolute;
+            bottom: -100px;
+            right: -100px;
+        }
+
+        @media screen and (max-width: 767px) {
+            .fugu-hero-section {
+                padding: 50px 0;
+            }
+
+            .fugu-hero-content h1 {
+                font-size: 36px;
+            }
+
+            .fugu-hero-content p {
+                font-size: 18px;
+            }
+
+            .fugu-hero-client-data h3 {
+                font-size: 36px;
+            }
+
+            .fugu-hero-client-data p {
+                font-size: 24px;
+            }
+
+            .fugu-hero-client-rating h3 {
+                font-size: 36px;
+            }
+        }

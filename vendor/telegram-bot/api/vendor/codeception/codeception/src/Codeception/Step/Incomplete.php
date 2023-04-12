@@ -1,0 +1,19 @@
+<?php
+namespace Codeception\Step;
+
+use Codeception\Step as CodeceptionStep;
+use Codeception\Lib\ModuleContainer;
+use PHPUnit_Framework_IncompleteTestError;
+
+class Incomplete extends CodeceptionStep
+{
+    public function run(ModuleContainer $container = null)
+    {
+        throw new PHPUnit_Framework_IncompleteTestError($this->getAction());
+    }
+
+    public function __toString()
+    {
+        return $this->getAction();
+    }
+}

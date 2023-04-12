@@ -106,6 +106,7 @@ $shortMAValues = movingAverage($priceData, $shortMA);
 $longMAValues = movingAverage($priceData, $longMA);
 
 // Calculate the moving average function
+
 function movingAverage($array, $period): array
 {
     $output = array();

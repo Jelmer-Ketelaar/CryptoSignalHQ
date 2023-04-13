@@ -1,11 +1,11 @@
 <?php return array(
     'root' => array(
-        'pretty_version' => 'dev-master',
-        'version' => 'dev-master',
+        'pretty_version' => 'dev-develop',
+        'version' => 'dev-develop',
         'type' => 'library',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
-        'reference' => '7770e26ac46cdbf7ebe0e074ec142281449cabce',
+        'reference' => '4472cad85ffc21f5ae682a8c2c32ebce1fbab592',
         'name' => 'jelmer/my-telegram-bot',
         'dev' => true,
     ),
@@ -74,12 +74,12 @@
             'dev_requirement' => false,
         ),
         'jelmer/my-telegram-bot' => array(
-            'pretty_version' => 'dev-master',
-            'version' => 'dev-master',
+            'pretty_version' => 'dev-develop',
+            'version' => 'dev-develop',
             'type' => 'library',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
-            'reference' => '7770e26ac46cdbf7ebe0e074ec142281449cabce',
+            'reference' => '4472cad85ffc21f5ae682a8c2c32ebce1fbab592',
             'dev_requirement' => false,
         ),
         'pear/console_table' => array(

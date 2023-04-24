@@ -1,7 +1,6 @@
 <?php
 
 // Initialize variables
-
 $shortMAValues = [];
 $longMAValues = [];
 
@@ -75,7 +74,6 @@ do {
 // If the response is still false after retrying, exit the script
 if ($response === false) {
     error_log("Error: Unable to retrieve valid API response after {$maxAttempts} attempts.");
-    exit;
 }
 
 error_log("Script started.");
@@ -154,22 +152,27 @@ function sendSignal($chatId, $message)
  */
 function movingAverage(array $array, int $shortPeriod, int $longPeriod)
 {
+    if (!is_array($array) || !count($array) || count($array) < max($shortPeriod, $longPeriod)) {
+        error_log("Error: Insufficient data for calculating moving averages. Please provide a larger dataset.");
+        return array(array(), array());
+    }
+
     error_log("Started movingAverage");
-    if (count($array) < max($shortPeriod, $longPeriod) || count($array) < $longPeriod) {
-        return [];
+    if (count($array) < $longPeriod) {
+        return [[], []];
     }
 
     $shortOutput = array();
     $longOutput = array();
     for ($i = 0; $i < count($array); $i++) {
-        if ($i >= $shortPeriod) {
+        if ($i >= $shortPeriod && $shortPeriod != 0) {
             $shortSum = 0;
             for ($j = $i - $shortPeriod + 1; $j <= $i; $j++) {
                 $shortSum += $array[$j];
             }
             $shortOutput[] = $shortSum / $shortPeriod;
         }
-        if ($i >= $longPeriod) {
+        if ($i >= $longPeriod && $longPeriod != 0) {
             $longSum = 0;
             for ($j = $i - $longPeriod + 1; $j <= $i; $j++) {
                 $longSum += $array[$j];
@@ -178,24 +181,23 @@ function movingAverage(array $array, int $shortPeriod, int $longPeriod)
         }
     }
 
+
     // Log the output of the function
     error_log("Short moving average output: " . print_r($shortOutput, true));
     error_log("Long moving average output: " . print_r($longOutput, true));
 
-    return array($shortOutput, $longOutput);
+    return [$shortOutput, $longOutput];
 }
 
-$shortPeriod = 20; // Define your short period value
-$longPeriod = 50; // Define your long period value
 
 function fetchHistoricalPriceData($symbol, $interval, $dataPoints)
 {
-    global $shortPeriod, $longPeriod, $shortMAValues, $longMAValues;
+    global $shortMA, $longMA, $shortMAValues, $longMAValues, $historicalData, $shortPeriod, $longPeriod;
 
     error_log("Started fetchHistoricalPriceData");
     $now = time(); // Get the current timestamp
-    $fromTimestamp = $now - $interval * $dataPoints;
-    $apiEndpoint = "https://api.bybit.com/v2/public/kline/list?symbol=$symbol&interval=$interval&from=$fromTimestamp&limit=$dataPoints";
+//    $fromTimestamp = $now - $interval * $dataPoints;
+    $apiEndpoint = "https://api.bybit.com/v2/public/kline/list?symbol=$symbol&interval=$interval&from=0&limit=$dataPoints";
     $response = getApiResponseWithExponentialBackoff($apiEndpoint);
 
     if (empty($response)) {
@@ -218,18 +220,16 @@ function fetchHistoricalPriceData($symbol, $interval, $dataPoints)
 
     // Check if there are enough data points
     if (count($prices) < max($shortPeriod, $longPeriod)) {
-        error_log("Error: Not enough data points to calculate moving averages. Short MA count: {$shortPeriod}, Long MA count: {$longPeriod}, Short MA data points available: " . count($shortMAValues) . ", Long MA data points available: " . count($longMAValues));
+        error_log("Warning: Not enough data points to calculate moving averages. Short MA count: {$shortMA}, Long MA count: {$longMA}, Data points available: " . count($prices));
         return ['prices' => [], 'shortMAValues' => [], 'longMAValues' => []];
     }
 
     // Calculate the moving averages
-    global $shortMAValues, $longMAValues;
     $shortMAValues = $longMAValues = array();
 
     if (!empty($prices)) {
-        list($shortMAValues, $longMAValues) = movingAverage($prices, $shortPeriod, $longPeriod);
+        list($shortMAValues, $longMAValues) = calculateMovingAverages($prices, $shortPeriod, $longPeriod);
     }
-
     // Debug output
     error_log("Short MA values: " . print_r($shortMAValues, true));
     error_log("Long MA values: " . print_r($longMAValues, true));
@@ -240,6 +240,16 @@ function fetchHistoricalPriceData($symbol, $interval, $dataPoints)
 }
 
 
+$shortPeriod = 20; // Define your short period value
+$longPeriod = 50; // Define your long period value
+
+$historicalData = fetchHistoricalPriceData("BTCUSD", 30, $shortPeriod + $longPeriod + 200);
+list($shortMAValues, $longMAValues) = movingAverage($historicalData['prices'], $shortPeriod, $longPeriod);
+
+
+if (count($shortMAValues) < $shortPeriod || count($longMAValues) < $longPeriod) {
+    echo "Error: Insufficient data for calculating moving averages. Please provide a larger dataset.\n";
+}
 function calculateVolatility($symbol, $interval, $dataPoints)
 {
     if ($interval <= 0 || $dataPoints <= 0) {
@@ -299,6 +309,7 @@ function calculateStandardDeviation($arr)
 
 function calculateTradingSignal($prices)
 {
+    $combinedIndicator = 0;
     $maLength = 10;
     $macdFastLength = 12;
     $macdSlowLength = 26;
@@ -356,27 +367,21 @@ function calculateTradingSignal($prices)
     return $combinedIndicator;
 }
 
-$loopCounter = 0;
-
-function calculateMovingAverages($prices, $period)
+function calculateMovingAverages($prices, $shortPeriod, $longPeriod)
 {
     global $shortMA, $longMA;
-    $movingAverages = [];
+    $shortMAValues = $longMAValues = array();
 
-    if (count($prices) >= $period) {
-        for ($i = $period - 1; $i < count($prices); $i++) {
-            $sum = 0;
-            for ($j = $i - $period + 1; $j <= $i; $j++) {
-                $sum += $prices[$j];
-            }
-            $movingAverages[] = $sum / $period;
-        }
+    if (count($prices) >= $longPeriod) {
+        $shortMAValues = array_slice(movingAverage($prices, $shortMA, $shortPeriod), -$longPeriod);
+        $longMAValues = array_slice(movingAverage($prices, $longMA, $longPeriod), -$longPeriod);
     }
 
     // Check if the moving averages array is not empty before returning
-    if (!empty($movingAverages)) {
-        list($shortMAValues, $longMAValues) = movingAverage($movingAverages, $shortMA, $longMA);
-        $ma = !empty($shortMAValues) && !empty($longMAValues) ? end($shortMAValues) - end($longMAValues) : 0;
+    if (!empty($shortMAValues) && !empty($longMAValues)) {
+        $ma = end($shortMAValues) - end($longMAValues);
+    } else {
+        $ma = 0;
     }
 
     return array($shortMAValues, $longMAValues, $ma);
@@ -386,14 +391,18 @@ function calculateMovingAverages($prices, $period)
 // Fetch historical price data
 $priceData = fetchHistoricalPriceData("BTCUSD", 30, max($shortMA, $longMA));
 
-if (!empty($shortMAs)) {
-    $lastShortMA = end($shortMAs);
+// Call the function with three arguments
+list($shortMAValues, $longMAValues, $ma) = calculateMovingAverages($priceData['prices'], $shortPeriod, $longPeriod);
+
+if (!empty($shortMAValues)) {
+    $lastShortMA = end($shortMAValues);
 }
 
-if (!empty($longMAs)) {
-    $lastLongMA = end($longMAs);
+if (!empty($longMAValues)) {
+    $lastLongMA = end($longMAValues);
 }
 
+$loopCounter = 0;
 while (true) {
     error_log("Main loop iteration: " . ++$loopCounter); // Log the current iteration
     // Get the current price from the API
@@ -479,14 +488,14 @@ while (true) {
 
             error_log("Calculating moving averages\n");
             // Calculate moving averages
-            $shortMAValues[] = calculateMovingAverages($prices, $shortPeriod);
-            $longMAValues[] = calculateMovingAverages($prices, $longPeriod);
+            $shortMAValues[] = calculateMovingAverages($prices, $shortPeriod, $longPeriod)[0];
+            $longMAValues[] = calculateMovingAverages($prices, $longPeriod, $shortPeriod)[1];
 
 
             // Get the last value of the calculated moving averages
             error_log("Get the last value of the calculated moving averages\n");
-            $lastShortMA = end($shortMA);
-            $lastLongMA = end($longMA);
+            $lastShortMA = end($shortMAValues);
+            $lastLongMA = end($longMAValues);
 
             // Define entry and exit zones based on the current price
             error_log(" Define entry and exit zones based on the current price\n");

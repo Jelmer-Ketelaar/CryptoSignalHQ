@@ -1,15 +1,16 @@
 <?php
 header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
 
 // Initialize variables
-$shortMAValues = array();
-$longMAValues = array();
+$shortSMAValues = array();
+$longSMAValues = array();
 
 $lastSignal = null; // Initialize $lastSignal with null
 
 // Set up the moving average parameters
-$shortMA = 20;
-$longMA = 50;
+$shortSMA = 20;
+$longSMA = 50;
 $ma = 0;
 
 // Set up the bot
@@ -32,7 +33,7 @@ $maxRetries = 5;
 // Retry the API request up to a maximum number of times
 $maxAttempts = 5;
 $attempts = 0;
-$retryDelay = 30; // in seconds
+$retryDelay = 60; // in seconds
 
 function getApiResponseWithExponentialBackoff($url, $apiKey = null)
 {
@@ -143,75 +144,48 @@ function sendSignal($chatId, $message)
     return false;
 }
 
-
-function movingAverage($array, $shortPeriod, $longPeriod)
+function simpleMovingAverage($array, $period)
 {
     // Check input array
     if (!is_array($array) || count($array) == 0) {
         error_log("Error: Input array is empty or not an array.");
-        return array(array(), array());
+        return array();
     }
 
-    // Check period values
-    if ($shortPeriod <= 0 || $longPeriod <= 0) {
-        error_log("Error: Invalid period for calculating moving averages.");
-        return array(array(), array());
+    // Check period value
+    if ($period <= 0) {
+        error_log("Error: Invalid period for calculating simple moving average.");
+        return array();
     }
 
     // Check data points
-    if (count($array) < max($shortPeriod, $longPeriod)) {
-        error_log("Error: Insufficient data for calculating moving averages. Please provide a larger dataset.");
-        return array(array(), array());
+    if (count($array) < $period) {
+        error_log("Error: Insufficient data for calculating simple moving average. Please provide a larger dataset.");
+        return array();
     }
 
-    $shortOutput = array();
-    $longOutput = array();
+    $output = array();
+    $sum = 0;
     for ($i = 0; $i < count($array); $i++) {
-        if ($i >= $shortPeriod) {
-            $shortSum = 0;
-            for ($j = $i - $shortPeriod + 1; $j <= $i; $j++) {
-                if ($j >= 0) {
-                    $shortSum += $array[$j];
-                }
-            }
-            $shortOutput[] = $shortSum / $shortPeriod;
+        $sum += $array[$i];
+        if ($i >= $period) {
+            $sum -= $array[$i - $period];
+            $output[] = $sum / $period;
         }
-        if ($i >= $longPeriod) {
-            $longSum = 0;
-            for ($j = $i - $longPeriod + 1; $j <= $i; $j++) {
-                if ($j >= 0) {
-                    $longSum += $array[$j];
-                }
-            }
-            $longOutput[] = $longSum / $longPeriod;
-        }
-    }
-
-    // Check if both short and long periods are met
-    if (count($shortOutput) < $shortPeriod || count($longOutput) < $longPeriod) {
-        error_log("Error: Short MA count: " . count($shortOutput) . ", Long MA count: " . count($longOutput) . ". Moving average arrays are empty or have length less than 1.");
-        return array(array(), array());
-    }
-
-    if ($longPeriod > count($array)) {
-        error_log("Error: Long period is greater than the number of prices.");
-        return array(array(), array());
     }
 
     // Log the output of the function
-    error_log("Short moving average output: " . print_r($shortOutput, true));
-    error_log("Long moving average output: " . print_r($longOutput, true));
+    error_log("SMA output: " . print_r($output, true));
 
-    return [$shortOutput, $longOutput];
+    return $output;
 }
-
 
 function fetchHistoricalPriceData($symbol, $interval, $dataPoints)
 {
-    $shortMA = 20; // Define your short period value
-    $longMA = 50; // Define your long period value
-    $shortMAValues = array();
-    $longMAValues = array();
+    $shortSMA = 20; // Define your short period value
+    $longSMA = 50; // Define your long period value
+    $shortSMAValues = array();
+    $longSMAValues = array();
 
     error_log("Started fetchHistoricalPriceData");
     $now = time(); // Get the current timestamp
@@ -236,22 +210,23 @@ function fetchHistoricalPriceData($symbol, $interval, $dataPoints)
 
     error_log("Price data: " . print_r($prices, true)); // Debug output
 
-    $shortPeriod = $shortMA;
-    $longPeriod = $longMA;
-    list($shortMAValues, $longMAValues) = movingAverage($prices, $shortPeriod, $longPeriod);
+    $shortPeriod = $shortSMA;
+    $longPeriod = $longSMA;
+    $shortSMAValues = simpleMovingAverage($prices, $shortPeriod);
+    $longSMAValues = simpleMovingAverage($prices, $longPeriod);
 
-    if (count($shortMAValues) < 1 || count($longMAValues) < 1) {
+    if (count($shortSMAValues) < 1 || count($longSMAValues) < 1) {
         error_log("Error: Moving average arrays are empty or have length less than 1.");
         return ['prices' => [], 'shortMAValues' => [], 'longMAValues' => []];
     }
 
     // Debug output
-    error_log("Short MA values: " . print_r($shortMAValues, true));
-    error_log("Long MA values: " . print_r($longMAValues, true));
-    error_log("Short MA count: " . count($shortMAValues));
-    error_log("Long MA count: " . count($longMAValues));
+    error_log("Short MA values: " . print_r($shortSMAValues, true));
+    error_log("Long MA values: " . print_r($longSMAValues, true));
+    error_log("Short MA count: " . count($shortSMAValues));
+    error_log("Long MA count: " . count($longSMAValues));
 
-    return array('prices' => $prices, 'shortMAValues' => $shortMAValues, 'longMAValues' => $longMAValues);
+    return array('prices' => $prices, 'shortMAValues' => $shortSMAValues, 'longMAValues' => $longSMAValues);
 }
 
 $shortPeriod = 20; // Define your short period value
@@ -259,10 +234,11 @@ $longPeriod = 50; // Define your long period value
 
 $historicalData = fetchHistoricalPriceData("BTCUSD", 30, $shortPeriod + $longPeriod + 300);
 
-list($shortMAValues, $longMAValues) = movingAverage($historicalData['prices'], $shortPeriod, $longPeriod);
+list($shortSMAValues, $longSMAValues) = simpleMovingAverage($historicalData['prices'], $shortPeriod, $longPeriod);
 
-
-if (count($shortMAValues) < $shortPeriod || count($longMAValues) < $longPeriod) {
+if (!is_array($shortSMAValues) || !is_array($longSMAValues)) {
+    echo "Error: shortSMAValues and longSMAValues must be arrays.\n";
+} elseif (count($shortSMAValues) < $shortPeriod || count($longSMAValues) < $longPeriod) {
     echo "Error: Insufficient data for calculating moving averages. Please provide a larger dataset.\n";
 }
 function calculateVolatility($symbol, $interval, $dataPoints)
@@ -294,19 +270,21 @@ function calculateVolatility($symbol, $interval, $dataPoints)
     return $stddev * sqrt(365 / $interval);
 }
 
+// Calculate the volatility based on historical prices
 $volatility = calculateVolatility("BTCUSD", 30, 50);
 
 if ($volatility === null) {
     $volatility = 0.01; // Set a default value for $volatility
 }
 
-if (count($shortMAValues) < 1 || count($longMAValues) < 1) {
+if (count($shortSMAValues) < 1 || count($longSMAValues) < 1) {
     error_log("Error: Moving average arrays are empty or have length less than 1.");
     return ['prices' => [], 'shortMAValues' => [], 'longMAValues' => []];
 }
 
-$buyThreshold = $longMAValues[count($longMAValues) - 1] - $shortMAValues[count($shortMAValues) - 1];
-$sellThreshold = $shortMAValues[count($shortMAValues) - 1] - $longMAValues[count($longMAValues) - 1];
+// Set the buy threshold based on the current market conditions
+$buyThreshold = $longSMAValues[count($longSMAValues) - 1] - $shortSMAValues[count($shortSMAValues) - 1] + $volatility * 2;
+$sellThreshold = $shortSMAValues[count($shortSMAValues) - 1] - $longSMAValues[count($longSMAValues) - 1] - $volatility * 2;
 
 function calculateStandardDeviation($arr)
 {
@@ -328,7 +306,6 @@ function calculateStandardDeviation($arr)
 
 function calculateTradingSignal($prices, $support, $resistance)
 {
-    $combinedIndicator = 0;
     $maLength = 10;
     $macdFastLength = 12;
     $macdSlowLength = 26;
@@ -366,9 +343,11 @@ function calculateTradingSignal($prices, $support, $resistance)
         // Calculate the Bollinger Bands
         $sma = array_sum(array_slice($prices, -$bbLength)) / $bbLength;
         $sd = 0;
+
         foreach (array_slice($prices, -$bbLength) as $price) {
             $sd += pow($price - $sma, 2);
         }
+
         $sd = sqrt($sd / $bbLength);
         $bbUpper = $sma + $bbMultiplier * $sd;
         $bbLower = $sma - $bbMultiplier * $sd;
@@ -394,37 +373,37 @@ function calculateTradingSignal($prices, $support, $resistance)
     return $combinedIndicator;
 }
 
+
 function calculateMovingAverages($prices, $shortPeriod, $longPeriod)
 {
-    $shortMAValues = array();
-    $longMAValues = array();
+    $shortSMAValues = array();
+    $longSMAValues = array();
     $ma = array();
 
     // Calculate short moving averages
     for ($i = 0; $i < count($prices) - $shortPeriod + 1; $i++) {
-        $shortMAValues[] = array_sum(array_slice($prices, $i, $shortPeriod)) / $shortPeriod;
+        $shortSMAValues[] = array_sum(array_slice($prices, $i, $shortPeriod)) / $shortPeriod;
     }
 
     // Calculate long moving averages
     if ($longPeriod > count($prices)) {
         error_log("Error: Long period is greater than the number of prices.");
-        return [$shortMAValues, $longMAValues, $ma];
+        return [$shortSMAValues, $longSMAValues, $ma];
     }
 
     for ($i = $longPeriod - 1; $i < count($prices); $i++) {
-        $longMAValues[] = array_sum(array_slice($prices, $i - $longPeriod + 1, $longPeriod)) / $longPeriod;
+        $longSMAValues[] = array_sum(array_slice($prices, $i - $longPeriod + 1, $longPeriod)) / $longPeriod;
     }
 
-    $ma['short'] = $shortMAValues;
-    $ma['long'] = $longMAValues;
+    $ma['short'] = $shortSMAValues;
+    $ma['long'] = $longSMAValues;
 
-    return [$shortMAValues, $longMAValues, $ma];
+    return [$shortSMAValues, $longSMAValues, $ma];
 }
 
-list($shortMAValues, $longMAValues) = movingAverage($historicalData['prices'], $shortPeriod, $longPeriod);
+list($shortSMAValues, $longSMAValues) = simpleMovingAverage($historicalData['prices'], $shortPeriod, $longPeriod);
 
-
-if (count($shortMAValues) < $shortPeriod || count($longMAValues) < $longPeriod) {
+if (count($shortSMAValues) < $shortPeriod || count($longSMAValues) < $longPeriod) {
     echo "Error: Insufficient data for calculating moving averages. Please provide a larger dataset.\n";
 }
 
@@ -442,23 +421,29 @@ function calculateSupportAndResistance($prices)
     return array($support, $resistance);
 }
 
-$shortPeriod = 20; // Define your short period value
-$longPeriod = 50; // Define your long period value
-
-$historicalData = fetchHistoricalPriceData("BTCUSD", 30, $shortPeriod + $longPeriod + 300);;
+$historicalData = fetchHistoricalPriceData("BTCUSD", 30, $shortPeriod + $longPeriod + 300);
 $prices = $historicalData['prices'];
 
 list($support, $resistance) = calculateSupportAndResistance($prices);
 
-if (!empty($shortMAValues)) {
-    $lastShortMA = end($shortMAValues);
-}
-
-if (!empty($longMAValues)) {
-    $lastLongMA = end($longMAValues);
-}
-
+// Call the calculateTradingSignal function
 $tradingSignal = calculateTradingSignal($prices, $support, $resistance);
+
+// Prepare the JSON response
+$response = [
+    'timestamp' => date('Y-m-d H:i:s'),
+    'calculateTradingSignal' => $tradingSignal
+];
+
+echo json_encode($response);
+
+if (!empty($shortSMAValues)) {
+    $lastShortMA = end($shortSMAValues);
+}
+
+if (!empty($longSMAValues)) {
+    $lastLongMA = end($longSMAValues);
+}
 
 $loopCounter = 0;
 while (true) {
@@ -484,7 +469,7 @@ while (true) {
         $potentialLosses = [];
 
         // Update the value of $ma based on the moving averages
-        if (!empty($shortMAValues) && !empty($longMAValues) && end($shortMAValues) > end($longMAValues)) {
+        if (!empty($shortSMAValues) && !empty($longSMAValues) && end($shortSMAValues) > end($longSMAValues)) {
             error_log("Update the value of ma based on the moving averages");
             $ma = 1; // Buy signal
         } else {
@@ -532,11 +517,11 @@ while (true) {
 // Check if a signal should be sent
         error_log("Check if a signal should be sent");
         $details = '';
-        if (count($shortMAValues) > 0 && count($longMAValues) > 0 &&
-            $shortMAValues[count($shortMAValues) - 1] != $ma &&
-            (($ma == 1 && $currentPrice >= $buyThreshold * $longMAValues[count($longMAValues) - 1]) ||
-                ($shortMAValues[count($shortMAValues) - 1] > $longMAValues[count($longMAValues) - 1] && $currentPrice >= $buyThreshold * $longMAValues[count($longMAValues) - 1]) ||
-                ($ma == -1 && $currentPrice <= $sellThreshold * $longMAValues[count($longMAValues) - 1])) &&
+        if (count($shortSMAValues) > 0 && count($longSMAValues) > 0 &&
+            $shortSMAValues[count($shortSMAValues) - 1] != $ma &&
+            (($ma == 1 && $currentPrice >= $buyThreshold * $longSMAValues[count($longSMAValues) - 1]) ||
+                ($shortSMAValues[count($shortSMAValues) - 1] > $longSMAValues[count($longSMAValues) - 1] && $currentPrice >= $buyThreshold * $longSMAValues[count($longSMAValues) - 1]) ||
+                ($ma == -1 && $currentPrice <= $sellThreshold * $longSMAValues[count($longSMAValues) - 1])) &&
             ($maxProfitTarget > 0 || $minLossTarget < 0) && $maxProfitTarget >= $minProfitThreshold) {
 
             // Calculate moving averages
@@ -546,14 +531,14 @@ while (true) {
 
             error_log("Calculating moving averages\n");
             // Calculate moving averages
-            $shortMAValues[] = calculateMovingAverages($prices, $shortPeriod, $longPeriod)[0];
-            $longMAValues[] = calculateMovingAverages($prices, $longPeriod, $shortPeriod)[1];
+            $shortSMAValues[] = calculateMovingAverages($prices, $shortPeriod, $longPeriod)[0];
+            $longSMAValues[] = calculateMovingAverages($prices, $longPeriod, $shortPeriod)[1];
 
 
             // Get the last value of the calculated moving averages
             error_log("Get the last value of the calculated moving averages\n");
-            $lastShortMA = end($shortMAValues);
-            $lastLongMA = end($longMAValues);
+            $lastShortMA = end($shortSMAValues);
+            $lastLongMA = end($longSMAValues);
 
             // Define entry and exit zones based on the current price
             error_log(" Define entry and exit zones based on the current price\n");
@@ -635,28 +620,28 @@ while (true) {
                 // Send the signal message
                 error_log("Sending the signal message \n");
                 sendSignal($chatId, $message);
-                $lastSignal = $shortMAValues[count($shortMAValues) - 1];
+                $lastSignal = $shortSMAValues[count($shortSMAValues) - 1];
                 $signalsSent++;
             }
 
         } else {
-            $details .= "Short MA count: " . count($shortMAValues) . ", Long MA count: " . count($longMAValues) . ". ";
+            $details .= "Short MA count: " . count($shortSMAValues) . ", Long MA count: " . count($longSMAValues) . ". ";
 
-            if (isset($shortMAValues[count($shortMAValues) - 1])) {
-                $details .= "Last short MA value: " . $shortMAValues[count($shortMAValues) - 1] . ". ";
+            if (isset($shortSMAValues[count($shortSMAValues) - 1])) {
+                $details .= "Last short MA value: " . $shortSMAValues[count($shortSMAValues) - 1] . ". ";
             }
 
-            if (isset($longMAValues[count($longMAValues) - 1])) {
-                $details .= "Last long MA value: " . $longMAValues[count($longMAValues) - 1] . ". ";
+            if (isset($longSMAValues[count($longSMAValues) - 1])) {
+                $details .= "Last long MA value: " . $longSMAValues[count($longSMAValues) - 1] . ". ";
             }
 
-            if ($ma == 1 && $currentPrice < $buyThreshold * $longMAValues[count($longMAValues) - 1]) {
-                $details .= "The current price (" . $currentPrice . ") is below the buy threshold (" . ($buyThreshold * $longMAValues[count($longMAValues) - 1]) . "). ";
+            if ($ma == 1 && $currentPrice < $buyThreshold * $longSMAValues[count($longSMAValues) - 1]) {
+                $details .= "The current price (" . $currentPrice . ") is below the buy threshold (" . ($buyThreshold * $longSMAValues[count($longSMAValues) - 1]) . "). ";
             }
 
-            if (!empty($longMAValues)) {
-                if ($ma == -1 && $currentPrice > $sellThreshold * $longMAValues[count($longMAValues) - 1]) {
-                    $details .= "The current price (" . $currentPrice . ") is above the sell threshold (" . ($sellThreshold * $longMAValues[count($longMAValues) - 1]) . "). ";
+            if (!empty($longSMAValues)) {
+                if ($ma == -1 && $currentPrice > $sellThreshold * $longSMAValues[count($longSMAValues) - 1]) {
+                    $details .= "The current price (" . $currentPrice . ") is above the sell threshold (" . ($sellThreshold * $longSMAValues[count($longSMAValues) - 1]) . "). ";
                 }
             }
 

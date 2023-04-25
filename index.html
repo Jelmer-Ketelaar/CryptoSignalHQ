@@ -2,11 +2,58 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trading Signal Chart</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 </head>
 <body>
 <canvas id="tradingSignalChart"></canvas>
-<script src="main.js"></script>
+<script>
+    const ctx = document.getElementById('tradingSignalChart').getContext('2d');
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [], // This will hold the x-axis labels (e.g., timestamps)
+            datasets: [{
+                label: 'Trading Signal',
+                data: [], // This will hold the trading signal values
+                borderColor: 'rgba(75, 192, 192, 1)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    function fetchTradingSignalData() {
+        console.log('test')
+        fetch('http://localhost:63342/CryptoSignalHQ/index.php?_ijt=o9ovsjl1f13vmcj8l8kkvg3gve&_ij_reload=RELOAD_ON_SAVE')
+            .then(response => response.json())
+            .then(data => {
+                console.log('test2')
+                console.log('Received data:', data); // Add this line to log the received data
+                // Update the chart with the new data
+                chart.data.labels.push(data.timestamp);
+                chart.data.datasets[0].data.push(data.calculateTradingSignal);
+                chart.update();
+            })
+            .catch(error => {
+                console.error('Error fetching trading signal data:', error);
+                console.log('Error message:', error.message);
+            });
+    }
+
+    // Fetch trading signal data every 5 seconds
+    setInterval(fetchTradingSignalData, 5000);
+
+    fetchTradingSignalData(); // Call the function once on page load
+
+</script>
 </body>
 </html>

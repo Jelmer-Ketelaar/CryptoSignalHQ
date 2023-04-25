@@ -234,7 +234,8 @@ $longPeriod = 50; // Define your long period value
 
 $historicalData = fetchHistoricalPriceData("BTCUSD", 30, $shortPeriod + $longPeriod + 300);
 
-list($shortSMAValues, $longSMAValues) = simpleMovingAverage($historicalData['prices'], $shortPeriod, $longPeriod);
+$shortSMAValues = simpleMovingAverage($historicalData['prices'], $shortPeriod);
+$longSMAValues = simpleMovingAverage($historicalData['prices'], $longPeriod);
 
 if (!is_array($shortSMAValues) || !is_array($longSMAValues)) {
     echo "Error: shortSMAValues and longSMAValues must be arrays.\n";

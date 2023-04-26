@@ -325,27 +325,25 @@ if (!is_array($shortSMAValues) || !is_array($longSMAValues)) {
     echo "Error: Insufficient data for calculating moving averages. Please provide a larger dataset.\n";
 }
 
-// Check for moving average crossover
-if ($shortSMAValues[count($shortSMAValues) - 1] > $longSMAValues[count($longSMAValues) - 1]) {
-    // If short-term moving average crosses above long-term moving average, increase buy threshold
-    $fixedPercentage = calculateFixedPercentage($volatility) * 1.1;
-} elseif ($shortSMAValues[count($shortSMAValues) - 1] < $longSMAValues[count($longSMAValues) - 1]) {
-    // If short-term moving average crosses below long-term moving average, decrease buy threshold
-    $fixedPercentage = calculateFixedPercentage($volatility) * 0.9;
-} else {
-    $fixedPercentage = calculateFixedPercentage($volatility);
-}
+// Calculate the fixed percentage based on the current market conditions
+$fixedPercentage = calculateFixedPercentage($volatility);
 
 // Set the buy threshold based on the current market conditions
 $shortMA = $shortSMAValues[count($shortSMAValues) - 1];
 $longMA = $longSMAValues[count($longSMAValues) - 1];
 
-$buyThreshold = $longMA * (1 + $fixedPercentage);
+if ($shortMA > $longMA) {
+    // If short-term moving average crosses above long-term moving average, increase the buy threshold
+    $buyThreshold = $longMA * (1 + $fixedPercentage);
+} else {
+    // If short-term moving average crosses below long-term moving average, decrease the buy threshold
+    $buyThreshold = $longMA * (1 - $fixedPercentage);
+}
+
 $sellThreshold = $longMA * (1 - $fixedPercentage);
 
 error_log("Buy Threshold: " . $buyThreshold);
 error_log("Sell Threshold: " . $sellThreshold);
-
 
 function calculateStandardDeviation($arr)
 {

@@ -32,13 +32,18 @@
     });
 
     function fetchTradingSignalData() {
-        console.log('test')
-        fetch('http://localhost:63342/CryptoSignalHQ/index.php?_ijt=o9ovsjl1f13vmcj8l8kkvg3gve&_ij_reload=RELOAD_ON_SAVE')
-            .then(response => response.json())
+        console.log('Fetching trading signal data');
+        fetch('http://localhost/CryptoSignalHQ/index.php')
+            .then(response => {
+                console.log('Fetch response:', response);
+                if (response.ok) {
+                    return response.json();
+                } else {
+                    throw new Error(`Request failed with status: ${response.status}`);
+                }
+            })
             .then(data => {
-                console.log('test2')
-                console.log('Received data:', data); // Add this line to log the received data
-                // Update the chart with the new data
+                console.log('Received data:', data);
                 chart.data.labels.push(data.timestamp);
                 chart.data.datasets[0].data.push(data.calculateTradingSignal);
                 chart.update();
@@ -49,10 +54,9 @@
             });
     }
 
-    // Fetch trading signal data every 5 seconds
-    setInterval(fetchTradingSignalData, 5000);
 
-    fetchTradingSignalData(); // Call the function once on page load
+    setInterval(fetchTradingSignalData, 5000);
+    fetchTradingSignalData();
 
 </script>
 </body>

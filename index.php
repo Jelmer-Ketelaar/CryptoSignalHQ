@@ -146,6 +146,8 @@ function sendSignal($chatId, $message)
 
 function simpleMovingAverage($array, $period)
 {
+    error_log("SMA input: " . print_r($array, true));
+
     // Check input array
     if (!is_array($array) || count($array) == 0) {
         error_log("Error: Input array is empty or not an array.");
@@ -165,13 +167,12 @@ function simpleMovingAverage($array, $period)
     }
 
     $output = array();
-    $sum = 0;
-    for ($i = 0; $i < count($array); $i++) {
-        $sum += $array[$i];
-        if ($i >= $period) {
-            $sum -= $array[$i - $period];
-            $output[] = $sum / $period;
+    for ($i = 0; $i <= count($array) - $period; $i++) {
+        $sum = 0;
+        for ($j = $i; $j < $i + $period; $j++) {
+            $sum += $array[$j];
         }
+        $output[] = $sum / $period;
     }
 
     // Log the output of the function
@@ -180,16 +181,17 @@ function simpleMovingAverage($array, $period)
     return $output;
 }
 
-function fetchHistoricalPriceData($symbol, $interval, $dataPoints)
+function fetchHistoricalPriceData($symbol, $intervalInSeconds, $dataPoints)
 {
-    $shortSMA = 20; // Define your short period value
-    $longSMA = 50; // Define your long period value
-    $shortSMAValues = array();
-    $longSMAValues = array();
+    $shortSMA = 10; // Define your short period value
+    $longSMA = 30; // Define your long period value
 
     error_log("Started fetchHistoricalPriceData");
     $now = time(); // Get the current timestamp
-    $apiEndpoint = "https://api.bybit.com/v2/public/kline/list?symbol=$symbol&interval=$interval&from=0&limit=$dataPoints";
+    $from = $now - ($intervalInSeconds * $dataPoints); // Calculate the 'from' timestamp dynamically
+
+    $intervalInMinutes = max(1, $intervalInSeconds / 60);
+    $apiEndpoint = "https://api.bybit.com/v2/public/kline/list?symbol=$symbol&interval=$intervalInMinutes&from=$from&limit=$dataPoints";
     $response = getApiResponseWithExponentialBackoff($apiEndpoint);
 
     if (empty($response)) {
@@ -229,13 +231,16 @@ function fetchHistoricalPriceData($symbol, $interval, $dataPoints)
     return array('prices' => $prices, 'shortMAValues' => $shortSMAValues, 'longMAValues' => $longSMAValues);
 }
 
-$shortPeriod = 20; // Define your short period value
-$longPeriod = 50; // Define your long period value
+$shortPeriod = 10;
+$longPeriod = 30;
+$historicalData = fetchHistoricalPriceData("BTCUSD", 60, $shortPeriod + $longPeriod + 500);
 
-$historicalData = fetchHistoricalPriceData("BTCUSD", 30, $shortPeriod + $longPeriod + 300);
+// No need to call simpleMovingAverage() again, since it's already called inside fetchHistoricalPriceData()
+$shortSMAValues = $historicalData['shortMAValues'];
+$longSMAValues = $historicalData['longMAValues'];
 
-$shortSMAValues = simpleMovingAverage($historicalData['prices'], $shortPeriod);
-$longSMAValues = simpleMovingAverage($historicalData['prices'], $longPeriod);
+error_log("Last short MA value: " . end($shortSMAValues));
+error_log("Last long MA value: " . end($longSMAValues));
 
 if (!is_array($shortSMAValues) || !is_array($longSMAValues)) {
     echo "Error: shortSMAValues and longSMAValues must be arrays.\n";
@@ -271,8 +276,35 @@ function calculateVolatility($symbol, $interval, $dataPoints)
     return $stddev * sqrt(365 / $interval);
 }
 
+function calculateFixedPercentage($volatility)
+{
+    // Define the minimum and maximum percentage values you want to use
+    $minPercentage = 0.005;
+    $maxPercentage = 0.02;
+
+    // Define the volatility range in which you want to vary the percentage
+    $minVolatility = 0.001;
+    $maxVolatility = 0.005;
+
+    // Calculate the percentage based on the volatility
+    if ($volatility <= $minVolatility) {
+        return $maxPercentage;
+    } elseif ($volatility >= $maxVolatility) {
+        return $minPercentage;
+    } else {
+        $percentageRange = $maxPercentage - $minPercentage;
+        $volatilityRange = $maxVolatility - $minVolatility;
+        $percentagePerVolatility = $percentageRange / $volatilityRange;
+        return $maxPercentage - ($volatility - $minVolatility) * $percentagePerVolatility;
+    }
+}
+
 // Calculate the volatility based on historical prices
-$volatility = calculateVolatility("BTCUSD", 30, 50);
+$volatility = calculateVolatility("BTCUSD", 60, 500);
+error_log("Calculated Volatility: " . $volatility);
+
+error_log("Last short MA value: " . $shortSMAValues[count($shortSMAValues) - 1]);
+error_log("Last long MA value: " . $longSMAValues[count($longSMAValues) - 1]);
 
 if ($volatility === null) {
     $volatility = 0.01; // Set a default value for $volatility
@@ -283,9 +315,37 @@ if (count($shortSMAValues) < 1 || count($longSMAValues) < 1) {
     return ['prices' => [], 'shortMAValues' => [], 'longMAValues' => []];
 }
 
+// Calculate the moving averages
+$shortSMAValues = simpleMovingAverage($historicalData['prices'], $shortPeriod);
+$longSMAValues = simpleMovingAverage($historicalData['prices'], $longPeriod);
+
+if (!is_array($shortSMAValues) || !is_array($longSMAValues)) {
+    echo "Error: shortSMAValues and longSMAValues must be arrays.\n";
+} elseif (count($shortSMAValues) < $shortPeriod || count($longSMAValues) < $longPeriod) {
+    echo "Error: Insufficient data for calculating moving averages. Please provide a larger dataset.\n";
+}
+
+// Check for moving average crossover
+if ($shortSMAValues[count($shortSMAValues) - 1] > $longSMAValues[count($longSMAValues) - 1]) {
+    // If short-term moving average crosses above long-term moving average, increase buy threshold
+    $fixedPercentage = calculateFixedPercentage($volatility) * 1.1;
+} elseif ($shortSMAValues[count($shortSMAValues) - 1] < $longSMAValues[count($longSMAValues) - 1]) {
+    // If short-term moving average crosses below long-term moving average, decrease buy threshold
+    $fixedPercentage = calculateFixedPercentage($volatility) * 0.9;
+} else {
+    $fixedPercentage = calculateFixedPercentage($volatility);
+}
+
 // Set the buy threshold based on the current market conditions
-$buyThreshold = $longSMAValues[count($longSMAValues) - 1] - $shortSMAValues[count($shortSMAValues) - 1] + $volatility * 2;
-$sellThreshold = $shortSMAValues[count($shortSMAValues) - 1] - $longSMAValues[count($longSMAValues) - 1] - $volatility * 2;
+$shortMA = $shortSMAValues[count($shortSMAValues) - 1];
+$longMA = $longSMAValues[count($longSMAValues) - 1];
+
+$buyThreshold = $longMA * (1 + $fixedPercentage);
+$sellThreshold = $longMA * (1 - $fixedPercentage);
+
+error_log("Buy Threshold: " . $buyThreshold);
+error_log("Sell Threshold: " . $sellThreshold);
+
 
 function calculateStandardDeviation($arr)
 {
@@ -374,7 +434,6 @@ function calculateTradingSignal($prices, $support, $resistance)
     return $combinedIndicator;
 }
 
-
 function calculateMovingAverages($prices, $shortPeriod, $longPeriod)
 {
     $shortSMAValues = array();
@@ -402,9 +461,12 @@ function calculateMovingAverages($prices, $shortPeriod, $longPeriod)
     return [$shortSMAValues, $longSMAValues, $ma];
 }
 
-list($shortSMAValues, $longSMAValues) = simpleMovingAverage($historicalData['prices'], $shortPeriod, $longPeriod);
+$shortSMAValues = simpleMovingAverage($historicalData['prices'], $shortPeriod);
+$longSMAValues = simpleMovingAverage($historicalData['prices'], $longPeriod);
 
-if (count($shortSMAValues) < $shortPeriod || count($longSMAValues) < $longPeriod) {
+if (!is_array($shortSMAValues) || !is_array($longSMAValues)) {
+    echo "Error: shortSMAValues and longSMAValues must be arrays.\n";
+} elseif (count($shortSMAValues) < $shortPeriod || count($longSMAValues) < $longPeriod) {
     echo "Error: Insufficient data for calculating moving averages. Please provide a larger dataset.\n";
 }
 
@@ -431,10 +493,10 @@ list($support, $resistance) = calculateSupportAndResistance($prices);
 $tradingSignal = calculateTradingSignal($prices, $support, $resistance);
 
 // Prepare the JSON response
-$response = [
-    'timestamp' => date('Y-m-d H:i:s'),
-    'calculateTradingSignal' => $tradingSignal
-];
+$response = array(
+    "timestamp" => time(),
+    "calculateTradingSignal" => rand(0, 100) // Replace with your actual trading signal calculation
+);
 
 echo json_encode($response);
 
@@ -558,11 +620,11 @@ while (true) {
 
             // Create the new signal message using the variables
             error_log("Create the new signal message using the variables\n");
-            $newSignalMessage = "💲| Pair: #BTCUSDT\n";
-            $newSignalMessage .= "🚀| Entry Zone: $entryZoneStart - $entryZoneEnd\n";
+            $newSignalMessage = "💰| Pair: #BTCUSDT\n";
+            $newSignalMessage .= "🎫️️️| Entry Zone: $entryZoneStart - $entryZoneEnd\n";
             $newSignalMessage .= "———————————————\n";
-            $newSignalMessage .= "📍| Take-Profit Targets: $takeProfitTargets\n";
-            $newSignalMessage .= "💢| Stop Targets: $stopTargets\n";
+            $newSignalMessage .= "📈️️️| Take-Profit Targets: $takeProfitTargets\n";
+            $newSignalMessage .= "📉️️️| Stop Targets: $stopTargets\n";
             $newSignalMessage .= "———————————————\n";
             $newSignalMessage .= "Period ends at: " . $endTimeFormatted . "⏰";
 
@@ -594,9 +656,9 @@ while (true) {
                 // Determine the type of signal
                 error_log("Determine the type of signal\n");
                 if ($ma == 1) {
-                    $signal = '🔥| Take Profit!';
+                    $signal = '📈️️️| Take Profit!';
                 } else {
-                    $signal = '⚠️| Stop Loss!';
+                    $signal = '📉️| Stop Loss!';
                 }
                 // Create the signal message
                 $message = "Signal: $signal\n";
@@ -654,7 +716,7 @@ while (true) {
             error_log("Signal not met. Details: " . $details);
         }
     }
-    sleep(30);
+    sleep(60);
 }
 
 

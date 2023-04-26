@@ -333,11 +333,11 @@ $shortMA = $shortSMAValues[count($shortSMAValues) - 1];
 $longMA = $longSMAValues[count($longSMAValues) - 1];
 
 if ($shortMA > $longMA) {
-    // If short-term moving average crosses above long-term moving average, increase the buy threshold
-    $buyThreshold = $longMA * (1 + $fixedPercentage);
+    // If short-term moving average crosses above long-term moving average, set the buy threshold
+    $buyThreshold = $longMA + ($shortMA - $longMA) * $fixedPercentage;
 } else {
-    // If short-term moving average crosses below long-term moving average, decrease the buy threshold
-    $buyThreshold = $longMA * (1 - $fixedPercentage);
+    // If short-term moving average crosses below long-term moving average, set the buy threshold
+    $buyThreshold = $shortMA;
 }
 
 $sellThreshold = $longMA * (1 - $fixedPercentage);

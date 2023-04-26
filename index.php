@@ -279,7 +279,7 @@ function calculateVolatility($symbol, $interval, $dataPoints)
 function calculateFixedPercentage($volatility)
 {
     // Define the minimum and maximum percentage values you want to use
-    $minPercentage = 0.005;
+    $minPercentage = 0.01;
     $maxPercentage = 0.02;
 
     // Define the volatility range in which you want to vary the percentage

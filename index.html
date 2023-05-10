@@ -33,7 +33,7 @@
 
     function fetchTradingSignalData() {
         console.log('Fetching trading signal data');
-        fetch('http://localhost/CryptoSignalHQ/index.php')
+        fetch('index.php')
             .then(response => {
                 console.log('Fetch response:', response);
                 if (response.ok) {

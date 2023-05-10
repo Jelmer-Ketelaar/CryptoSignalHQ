@@ -1,4 +1,5 @@
 <?php
+/** @noinspection ALL */
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 
@@ -22,12 +23,7 @@ $chatId = '@CryptoSignalHQ_VIP';
 $apiKey = "nHiBNHtobep1o3bQwo"; // Replace with your actual API key
 $apiEndpoint = "https://api.bybit.com/v2/public/tickers?symbol=BTCUSDT";
 
-// Set up the message limit
-error_log("Set up the message limit");
-$messagesPerDay = rand(3, 10);
-
-// Send a message function
-$signalsSent = 0;
+// Set up the maxRetries
 $maxRetries = 5;
 
 // Retry the API request up to a maximum number of times
@@ -62,7 +58,7 @@ function getApiResponseWithExponentialBackoff($url, $apiKey = null)
         $delay *= 2; // Double the delay for the next attempt
     }
 
-    error_log("Error: Unable to retrieve valid API response after {$attempts} attempts.");
+    error_log("Error: Unable to retrieve valid API response after $attempts attempts.");
     return false;
 }
 
@@ -75,7 +71,7 @@ do {
 
 // If the response is still false after retrying, exit the script
 if ($response === false) {
-    error_log("Error: Unable to retrieve valid API response after {$maxAttempts} attempts.");
+    error_log("Error: Unable to retrieve valid API response after $maxAttempts attempts.");
 }
 
 error_log("Script started.");
@@ -130,13 +126,13 @@ function sendSignal($chatId, $message)
         if ($httpCode == 200) {
             return $response;
         } elseif ($httpCode == 400) {
-            error_log("Error: Telegram API response on attempt {$attempts}: HTTP code {$httpCode}");
+            error_log("Error: Telegram API response on attempt $attempts: HTTP code $httpCode");
             error_log("Error: Bad request. Please check the chat_id, message, and bot token.");
             break;
         } else {
             // Show the API response even if there is an error
-            error_log("Error: Telegram API response on attempt {$attempts}: HTTP code {$httpCode}");
-            error_log("Error: Unable to send message on attempt {$attempts}. Retrying...\n");
+            error_log("Error: Telegram API response on attempt $attempts: HTTP code $httpCode");
+            error_log("Error: Unable to send message on attempt $attempts. Retrying...\n");
         }
     }
 
@@ -334,13 +330,13 @@ $longMA = $longSMAValues[count($longSMAValues) - 1];
 
 if ($shortMA > $longMA) {
     // If short-term moving average crosses above long-term moving average, set the buy threshold
-    $buyThreshold = $longMA + ($shortMA - $longMA) * $fixedPercentage;
+    $buyThreshold = $longMA + ($shortMA - $longMA) * ($fixedPercentage * 0.95);
 } else {
-    // If short-term moving average crosses below long-term moving average, set the buy threshold
-    $buyThreshold = $shortMA;
+    // If short-term moving average crosses below long-term moving average, set the buy threshold to be a fixed percentage above the short MA
+    $buyThreshold = $shortMA + $shortMA * $fixedPercentage;
 }
 
-$sellThreshold = $longMA * (1 - $fixedPercentage);
+$sellThreshold = $longMA * (1 - $fixedPercentage * 0.1);
 
 error_log("Buy Threshold: " . $buyThreshold);
 error_log("Sell Threshold: " . $sellThreshold);
@@ -506,7 +502,11 @@ if (!empty($longSMAValues)) {
     $lastLongMA = end($longSMAValues);
 }
 
+// Initialize the messages sent today counter
+$messagesSentToday = 0;
 $loopCounter = 0;
+$lastSignalTime = time();
+$today = date('Y-m-d'); // Keep track of the current day
 while (true) {
     error_log("Main loop iteration: " . ++$loopCounter); // Log the current iteration
     // Get the current price from the API
@@ -569,8 +569,8 @@ while (true) {
 
 // Use the chosen target levels in the signal message
         error_log("Use the chosen target levels in the signal message");
-        $maxProfitTarget = 0.1; // 10%
-        $minLossTarget = 0.1; // 10%
+        $maxProfitTarget = 0.05; // 5%
+        $minLossTarget = 0.03; // 3%
 
         $takeProfitTargets = round($currentPrice * (1 + $maxProfitTarget), 2);
         $stopTargets = round($currentPrice * (1 - $minLossTarget), 2);
@@ -631,6 +631,13 @@ while (true) {
 
             // Call the sendSignal function with the appropriate arguments
             sendSignal($chatId, $newSignalMessage);
+            $messagesSentToday++; // Increment the messages sent today counter
+
+            $currentDay = date('Y-m-d'); // Get the current day
+            if ($currentDay != $today) {
+                $today = $currentDay; // Update the day
+                $messagesSentToday = 0; // Reset the messages sent today counter
+            }
 
             if ($response === false) {
                 error_log("Failed to send message.");
@@ -678,13 +685,90 @@ while (true) {
                     $message .= "❌| Loss: " . abs($profit) . "%\n";
                 }
 
+                // Check if the maximum number of messages have been sent for the day
+                $maxMessagesPerDay = 10; // Maximum number of messages to be sent per day
+                if ($messagesSentToday >= $maxMessagesPerDay) {
+                    error_log("Maximum number of messages for the day has been reached.");
+                    continue;
+                }
+
                 // Send the signal message
                 error_log("Sending the signal message \n");
                 sendSignal($chatId, $message);
-                $lastSignal = $shortSMAValues[count($shortSMAValues) - 1];
-                $signalsSent++;
-            }
+                $messagesSentToday++; // Increment the messages sent today counter
 
+                // Check if the current day is different from the last signal's day
+                $currentDay = date('Y-m-d'); // Get the current day
+                $lastSignalDay = date('Y-m-d', $lastSignalTime);
+
+                if ($currentDay != $lastSignalDay) {
+                    // A new day has begun, reset the messages sent today counter
+                    $messagesSentToday = 0;
+                    $lastSignalTime = time(); // update last signal time
+                }
+
+                // Ensure at least 3 messages are sent everyday
+                if ($messagesSentToday < 3 && date('H') >= 21) { // if it's past 9 PM, and we haven't sent 3 messages
+                    $signalsToSend = 3 - $messagesSentToday;
+                    for ($i = 0; $i < $signalsToSend; $i++) {
+                        // Create artificial signal message
+                        $newSignalArtificalMessage = "💰| Pair: #BTCUSDT\n";
+                        $newSignalArtificalMessage .= "🎫️️️| Entry Zone: Artificial Signal\n";
+                        $newSignalArtificalMessage .= "———————————————\n";
+                        $newSignalArtificalMessage .= "📈️️️| Take-Profit Targets: Artificial Signal\n";
+                        $newSignalArtificalMessage .= "📉️️️| Stop Targets: Artificial Signal\n";
+                        $newSignalArtificalMessage .= "———————————————\n";
+                        $newSignalArtificalMessage .= "Period ends at: Artificial Signal ⏰";
+
+                        // Send the signal message
+                        echo("Sending the newSignalMessage \n");
+                        // Call the sendSignal function with the appropriate arguments
+                        sendSignal($chatId, $newSignalArtificalMessage);
+                        $messagesSentToday++; // Increment the messages sent today counter
+                        $lastSignalTime = time(); // update last signal time
+                    }
+                }
+
+                // Check if the current day is different from the last signal's day
+                $currentDay = date('Y-m-d'); // Get the current day
+                $lastSignalDay = date('Y-m-d', $lastSignalTime);
+
+                if ($currentDay != $lastSignalDay) {
+                    // A new day has begun, reset the messages sent today counter
+                    $messagesSentToday = 0;
+                    $lastSignalTime = time(); // update last signal time
+                }
+
+                // Ensure at least 3 messages are sent everyday
+                if ($messagesSentToday < 3 && date('H') >= 21) { // if it's past 9 PM and we haven't sent 3 messages
+                    $signalsToSend = 3 - $messagesSentToday;
+                    for ($i = 0; $i < $signalsToSend; $i++) {
+                        // Create additional signal message based on last known trading data
+                        $entryZoneStart = round($currentPrice * 0.995, 2);
+                        $entryZoneEnd = round($currentPrice * 1.005, 2);
+
+                        $takeProfitTargets = round($currentPrice * (1 + $maxProfitTarget), 2);
+                        $stopTargets = round($currentPrice * (1 - $minLossTarget), 2);
+
+                        $endTime = time() + $periodSeconds;
+                        $endTimeFormatted = date('Y-m-d H:i:s', $endTime); // format end time as a string
+
+                        $newSignalMessage = "💰| Pair: #BTCUSDT\n";
+                        $newSignalMessage .= "🎫️️️| Entry Zone: $entryZoneStart - $entryZoneEnd\n";
+                        $newSignalMessage .= "———————————————\n";
+                        $newSignalMessage .= "📈️️️| Take-Profit Targets: $takeProfitTargets\n";
+                        $newSignalMessage .= "📉️️️| Stop Targets: $stopTargets\n";
+                        $newSignalMessage .= "———————————————\n";
+                        $newSignalMessage .= "Period ends at: " . $endTimeFormatted . "⏰";
+
+                        // Send the signal message
+                        echo("Sending the newSignalMessage \n");
+                        sendSignal($chatId, $newSignalMessage);
+                        $messagesSentToday++; // Increment the messages sent today counter
+                        $lastSignalTime = time(); // update last signal time
+                    }
+                }
+            }
         } else {
             $details .= "Short MA count: " . count($shortSMAValues) . ", Long MA count: " . count($longSMAValues) . ". ";
 
@@ -696,13 +780,13 @@ while (true) {
                 $details .= "Last long MA value: " . $longSMAValues[count($longSMAValues) - 1] . ". ";
             }
 
-            if ($ma == 1 && $currentPrice < $buyThreshold * $longSMAValues[count($longSMAValues) - 1]) {
-                $details .= "The current price (" . $currentPrice . ") is below the buy threshold (" . ($buyThreshold * $longSMAValues[count($longSMAValues) - 1]) . "). ";
+            if ($ma == 1 && $currentPrice < $buyThreshold) {
+                $details .= "The current price (" . $currentPrice . ") is below the buy threshold (" . $buyThreshold . "). ";
             }
 
             if (!empty($longSMAValues)) {
-                if ($ma == -1 && $currentPrice > $sellThreshold * $longSMAValues[count($longSMAValues) - 1]) {
-                    $details .= "The current price (" . $currentPrice . ") is above the sell threshold (" . ($sellThreshold * $longSMAValues[count($longSMAValues) - 1]) . "). ";
+                if ($ma == -1 && $currentPrice > $sellThreshold) {
+                    $details .= "The current price (" . $currentPrice . ") is above the sell threshold (" . $sellThreshold . "). ";
                 }
             }
 

@@ -331,9 +331,11 @@ $longMA = $longSMAValues[count($longSMAValues) - 1];
 if ($shortMA > $longMA) {
     // If short-term moving average crosses above long-term moving average, set the buy threshold
     $buyThreshold = $longMA + ($shortMA - $longMA) * ($fixedPercentage * 0.95);
+    $sellThreshold = $buyThreshold * (1 - $stopLossPercentage);
 } else {
     // If short-term moving average crosses below long-term moving average, set the buy threshold to be a fixed percentage above the short MA
     $buyThreshold = $shortMA + $shortMA * $fixedPercentage;
+    $sellThreshold = $buyThreshold * (1 - $stopLossPercentage);
 }
 
 $sellThreshold = $longMA * (1 - $fixedPercentage * 0.1);
@@ -523,12 +525,6 @@ while (true) {
         // Calculate the trading signal
         $combinedIndicator = calculateTradingSignal($prices, $support, $resistance);
 
-        // Calculate the potential profit and loss for different target levels
-        error_log("Calculating the potential profit and loss for different target levels");
-        $targets = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-        $potentialProfits = [];
-        $potentialLosses = [];
-
         // Update the value of $ma based on the moving averages
         if (!empty($shortSMAValues) && !empty($longSMAValues) && end($shortSMAValues) > end($longSMAValues)) {
             error_log("Update the value of ma based on the moving averages");
@@ -537,24 +533,30 @@ while (true) {
             $ma = -1; // Sell signal
         }
 
+        // Calculate the potential profit and loss for different target levels
+        error_log("Calculating the potential profit and loss for different target levels");
+        $targets = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        $potentialProfits = [];
+        $potentialLosses = [];
+
         foreach ($targets as $target) {
             $buyPrice = 0;
             if ($ma == 1) {
                 // Buy signal
                 error_log("Buy signal");
-                $sellPrice = round($currentPrice * (1 + $target / 100), 2);
-                $stopPrice = round($currentPrice * (1 - $target / 100), 2);
                 $buyPrice = $currentPrice;
+                $sellPrice = round($buyPrice * (1 + $target / 100), 2);
+                $stopPrice = round($buyPrice * (1 - $target / 100), 2);
                 $potentialProfit = round(($sellPrice - $buyPrice) / $buyPrice * 100, 2);
-                $potentialLoss = round(($stopPrice - $buyPrice) / $buyPrice * 100, 2);
+                $potentialLoss = round(($buyPrice - $stopPrice) / $buyPrice * 100, 2);
             } else {
                 // Sell signal
                 error_log("Sell signal");
-                $sellPrice = round($currentPrice * (1 - $target / 100), 2);
-                $stopPrice = round($currentPrice * (1 + $target / 100), 2);
                 $buyPrice = $currentPrice;
+                $sellPrice = round($buyPrice * (1 - $target / 100), 2);
+                $stopPrice = round($buyPrice * (1 + $target / 100), 2);
                 $potentialProfit = round(($buyPrice - $sellPrice) / $sellPrice * 100, 2);
-                $potentialLoss = round(($buyPrice - $stopPrice) / $buyPrice * 100, 2);
+                $potentialLoss = round(($stopPrice - $buyPrice) / $buyPrice * 100, 2);
             }
             $potentialProfits[$target] = $potentialProfit;
             $potentialLosses[$target] = $potentialLoss;
@@ -566,193 +568,55 @@ while (true) {
         $maxProfitTarget = array_keys($potentialProfits, max($potentialProfits))[0];
         $minLossTarget = array_keys($potentialLosses, min($potentialLosses))[0];
 
-
-// Use the chosen target levels in the signal message
-        error_log("Use the chosen target levels in the signal message");
-        $maxProfitTarget = 0.05; // 5%
-        $minLossTarget = 0.03; // 3%
-
-        $takeProfitTargets = round($currentPrice * (1 + $maxProfitTarget), 2);
-        $stopTargets = round($currentPrice * (1 - $minLossTarget), 2);
+        $takeProfitTargets = round($buyPrice * (1 + $maxProfitTarget / 100), 2);
+        $stopTargets = round($buyPrice * (1 - $minLossTarget / 100), 2);
 
 // Check if a signal should be sent
         error_log("Check if a signal should be sent");
         $details = '';
-        if (count($shortSMAValues) > 0 && count($longSMAValues) > 0 &&
-            $shortSMAValues[count($shortSMAValues) - 1] != $ma &&
-            (($ma == 1 && $currentPrice >= $buyThreshold * $longSMAValues[count($longSMAValues) - 1]) ||
-                ($shortSMAValues[count($shortSMAValues) - 1] > $longSMAValues[count($longSMAValues) - 1] && $currentPrice >= $buyThreshold * $longSMAValues[count($longSMAValues) - 1]) ||
-                ($ma == -1 && $currentPrice <= $sellThreshold * $longSMAValues[count($longSMAValues) - 1])) &&
-            ($maxProfitTarget > 0 || $minLossTarget < 0) && $maxProfitTarget >= $minProfitThreshold) {
+        if (count($shortSMAValues) > 0 && count($longSMAValues) > 0) {
+            $shortSMAValue = $shortSMAValues[count($shortSMAValues) - 1];
+            $longSMAValue = $longSMAValues[count($longSMAValues) - 1];
 
-            // Calculate moving averages
-            error_log("Setting variables\n");
-            $shortPeriod = 50;
-            $longPeriod = 100;
+            if ($shortSMAValue != $ma) {
+                if (($ma == 1 && $currentPrice >= $buyThreshold * $longSMAValue) ||
+                    ($shortSMAValue > $longSMAValue && $currentPrice >= $buyThreshold * $longSMAValue) ||
+                    ($ma == -1 && $currentPrice <= $sellThreshold * $longSMAValue)) {
+                    if (($maxProfitTarget != 0 || $minLossTarget < 0) && $maxProfitTarget >= $minProfitThreshold) {
 
-            error_log("Calculating moving averages\n");
-            // Calculate moving averages
-            $shortSMAValues[] = calculateMovingAverages($prices, $shortPeriod, $longPeriod)[0];
-            $longSMAValues[] = calculateMovingAverages($prices, $longPeriod, $shortPeriod)[1];
+                        // Calculate moving averages
+                        error_log("Setting variables\n");
+                        $shortPeriod = 50;
+                        $longPeriod = 100;
+
+                        error_log("Calculating moving averages\n");
+                        // Calculate moving averages
+                        $shortSMAValues[] = calculateMovingAverages($prices, $shortPeriod, $longPeriod)[0];
+                        $longSMAValues[] = calculateMovingAverages($prices, $longPeriod, $shortPeriod)[1];
 
 
-            // Get the last value of the calculated moving averages
-            error_log("Get the last value of the calculated moving averages\n");
-            $lastShortMA = end($shortSMAValues);
-            $lastLongMA = end($longSMAValues);
+                        // Get the last value of the calculated moving averages
+                        error_log("Get the last value of the calculated moving averages\n");
+                        $lastShortMA = end($shortSMAValues);
+                        $lastLongMA = end($longSMAValues);
 
-            // Define entry and exit zones based on the current price
-            error_log(" Define entry and exit zones based on the current price\n");
-            $entryZoneStart = round($currentPrice * 0.995, 2);
-            $entryZoneEnd = round($currentPrice * 1.005, 2);
-
-            $startTime = time(); // current time
-            $periodDays = 1;
-            $periodHours = 18;
-            $periodMinutes = 1;
-            $periodSeconds = ($periodDays * 24 * 60 * 60) + ($periodHours * 60 * 60) + ($periodMinutes * 60);
-
-            $endTime = $startTime + $periodSeconds;
-            $endTimeFormatted = date('Y-m-d H:i:s', $endTime); // format end time as a string
-            echo "Period ends at: " . $endTimeFormatted;
-
-            // Create the new signal message using the variables
-            error_log("Create the new signal message using the variables\n");
-            $newSignalMessage = "💰| Pair: #BTCUSDT\n";
-            $newSignalMessage .= "🎫️️️| Entry Zone: $entryZoneStart - $entryZoneEnd\n";
-            $newSignalMessage .= "———————————————\n";
-            $newSignalMessage .= "📈️️️| Take-Profit Targets: $takeProfitTargets\n";
-            $newSignalMessage .= "📉️️️| Stop Targets: $stopTargets\n";
-            $newSignalMessage .= "———————————————\n";
-            $newSignalMessage .= "Period ends at: " . $endTimeFormatted . "⏰";
-
-            // Send the signal message
-            echo("Sending the newSignalMessage \n");
-
-            // Call the sendSignal function with the appropriate arguments
-            sendSignal($chatId, $newSignalMessage);
-            $messagesSentToday++; // Increment the messages sent today counter
-
-            $currentDay = date('Y-m-d'); // Get the current day
-            if ($currentDay != $today) {
-                $today = $currentDay; // Update the day
-                $messagesSentToday = 0; // Reset the messages sent today counter
-            }
-
-            if ($response === false) {
-                error_log("Failed to send message.");
-            } else {
-                error_log("Message sent successfully.");
-            }
-
-            $buyPrice = round($currentPrice * $buyThreshold, 2);
-            $sellPrice = round($currentPrice * $sellThreshold, 2);
-
-            // Wait for the price to hit the entry zone
-            while ($currentPrice < $entryZoneStart || $currentPrice > $entryZoneEnd) {
-                error_log("Wait for the price to hit the entry zone\n");
-                $response = getApiResponseWithExponentialBackoff($apiEndpoint, $apiKey);
-                $data = json_decode($response, true);
-                $currentPrice = $data['result'][0]['last_price'] ?? null;
-            }
-
-            // Check if the buy price or sell price has been reached
-            if ($currentPrice >= $buyPrice || $currentPrice <= $sellPrice) {
-                // Determine the type of signal
-                error_log("Determine the type of signal\n");
-                if ($ma == 1) {
-                    $signal = '📈️️️| Take Profit!';
-                } else {
-                    $signal = '📉️| Stop Loss!';
-                }
-                // Create the signal message
-                $message = "Signal: $signal\n";
-                $message .= "———————————————\n";
-                $message .= "🟢| Buy bitcoin at: $buyPrice\n";
-                $message .= "———————————————\n";
-                $message .= "🔴| Sell bitcoin at: $sellPrice\n";
-                $message .= "———————————————\n";
-
-                // Calculate the profit/loss and add it to the message
-                error_log("Calculate the profit/loss and add it to the message\n");
-                $entryPrice = $ma == 1 ? $buyPrice : $sellPrice;
-                $exitPrice = $ma == 1 ? $sellPrice : $buyPrice;
-                $profit = round((($exitPrice - $entryPrice) / $entryPrice) * 100, 2);
-
-                if ($profit > 0) {
-                    $message .= "✅| Profit: $profit%\n";
-                } else {
-                    $message .= "❌| Loss: " . abs($profit) . "%\n";
-                }
-
-                // Check if the maximum number of messages have been sent for the day
-                $maxMessagesPerDay = 10; // Maximum number of messages to be sent per day
-                if ($messagesSentToday >= $maxMessagesPerDay) {
-                    error_log("Maximum number of messages for the day has been reached.");
-                    continue;
-                }
-
-                // Send the signal message
-                error_log("Sending the signal message \n");
-                sendSignal($chatId, $message);
-                $messagesSentToday++; // Increment the messages sent today counter
-
-                // Check if the current day is different from the last signal's day
-                $currentDay = date('Y-m-d'); // Get the current day
-                $lastSignalDay = date('Y-m-d', $lastSignalTime);
-
-                if ($currentDay != $lastSignalDay) {
-                    // A new day has begun, reset the messages sent today counter
-                    $messagesSentToday = 0;
-                    $lastSignalTime = time(); // update last signal time
-                }
-
-                // Ensure at least 3 messages are sent everyday
-                if ($messagesSentToday < 3 && date('H') >= 21) { // if it's past 9 PM, and we haven't sent 3 messages
-                    $signalsToSend = 3 - $messagesSentToday;
-                    for ($i = 0; $i < $signalsToSend; $i++) {
-                        // Create artificial signal message
-                        $newSignalArtificalMessage = "💰| Pair: #BTCUSDT\n";
-                        $newSignalArtificalMessage .= "🎫️️️| Entry Zone: Artificial Signal\n";
-                        $newSignalArtificalMessage .= "———————————————\n";
-                        $newSignalArtificalMessage .= "📈️️️| Take-Profit Targets: Artificial Signal\n";
-                        $newSignalArtificalMessage .= "📉️️️| Stop Targets: Artificial Signal\n";
-                        $newSignalArtificalMessage .= "———————————————\n";
-                        $newSignalArtificalMessage .= "Period ends at: Artificial Signal ⏰";
-
-                        // Send the signal message
-                        echo("Sending the newSignalMessage \n");
-                        // Call the sendSignal function with the appropriate arguments
-                        sendSignal($chatId, $newSignalArtificalMessage);
-                        $messagesSentToday++; // Increment the messages sent today counter
-                        $lastSignalTime = time(); // update last signal time
-                    }
-                }
-
-                // Check if the current day is different from the last signal's day
-                $currentDay = date('Y-m-d'); // Get the current day
-                $lastSignalDay = date('Y-m-d', $lastSignalTime);
-
-                if ($currentDay != $lastSignalDay) {
-                    // A new day has begun, reset the messages sent today counter
-                    $messagesSentToday = 0;
-                    $lastSignalTime = time(); // update last signal time
-                }
-
-                // Ensure at least 3 messages are sent everyday
-                if ($messagesSentToday < 3 && date('H') >= 21) { // if it's past 9 PM and we haven't sent 3 messages
-                    $signalsToSend = 3 - $messagesSentToday;
-                    for ($i = 0; $i < $signalsToSend; $i++) {
-                        // Create additional signal message based on last known trading data
+                        // Define entry and exit zones based on the current price
+                        error_log(" Define entry and exit zones based on the current price\n");
                         $entryZoneStart = round($currentPrice * 0.995, 2);
                         $entryZoneEnd = round($currentPrice * 1.005, 2);
 
-                        $takeProfitTargets = round($currentPrice * (1 + $maxProfitTarget), 2);
-                        $stopTargets = round($currentPrice * (1 - $minLossTarget), 2);
+                        $startTime = time(); // current time
+                        $periodDays = 1;
+                        $periodHours = 18;
+                        $periodMinutes = 1;
+                        $periodSeconds = ($periodDays * 24 * 60 * 60) + ($periodHours * 60 * 60) + ($periodMinutes * 60);
 
-                        $endTime = time() + $periodSeconds;
+                        $endTime = $startTime + $periodSeconds;
                         $endTimeFormatted = date('Y-m-d H:i:s', $endTime); // format end time as a string
+                        error_log("Period ends at: " . $endTimeFormatted);
 
+                        // Create the new signal message using the variables
+                        error_log("Create the new signal message using the variables\n");
                         $newSignalMessage = "💰| Pair: #BTCUSDT\n";
                         $newSignalMessage .= "🎫️️️| Entry Zone: $entryZoneStart - $entryZoneEnd\n";
                         $newSignalMessage .= "———————————————\n";
@@ -762,43 +626,168 @@ while (true) {
                         $newSignalMessage .= "Period ends at: " . $endTimeFormatted . "⏰";
 
                         // Send the signal message
-                        echo("Sending the newSignalMessage \n");
+                        error_log("Sending the newSignalMessage");
+
+                        // Call the sendSignal function with the appropriate arguments
                         sendSignal($chatId, $newSignalMessage);
                         $messagesSentToday++; // Increment the messages sent today counter
-                        $lastSignalTime = time(); // update last signal time
+
+                        $currentDay = date('Y-m-d'); // Get the current day
+                        if ($currentDay != $today) {
+                            $today = $currentDay; // Update the day
+                            $messagesSentToday = 0; // Reset the messages sent today counter
+                        }
+
+                        if ($response === false) {
+                            error_log("Failed to send message.");
+                        } else {
+                            error_log("Message sent successfully.");
+                        }
+
+                        $buyPrice = round($currentPrice * $buyThreshold, 2);
+                        $sellPrice = round($currentPrice * $sellThreshold, 2);
+
+                        // Wait for the price to hit the entry zone
+                        while ($currentPrice < $entryZoneStart || $currentPrice > $entryZoneEnd) {
+                            error_log("Wait for the price to hit the entry zone\n");
+                            $response = getApiResponseWithExponentialBackoff($apiEndpoint, $apiKey);
+                            $data = json_decode($response, true);
+                            $currentPrice = $data['result'][0]['last_price'] ?? null;
+                        }
+
+                        // Check if the buy price or sell price has been reached
+                        if ($currentPrice >= $buyPrice || $currentPrice <= $sellPrice) {
+                            // Determine the type of signal
+                            error_log("Determine the type of signal\n");
+                            if ($ma == 1) {
+                                $signal = '📈️️️| Take Profit!';
+                            } else {
+                                $signal = '📉️| Stop Loss!';
+                            }
+                            // Create the signal message
+                            $message = "Signal: $signal\n";
+                            $message .= "———————————————\n";
+                            $message .= "🟢| Buy bitcoin at: $buyPrice\n";
+                            $message .= "———————————————\n";
+                            $message .= "🔴| Sell bitcoin at: $sellPrice\n";
+                            $message .= "———————————————\n";
+
+                            // Calculate the profit/loss and add it to the message
+                            error_log("Calculate the profit/loss and add it to the message\n");
+                            $entryPrice = $ma == 1 ? $buyPrice : $sellPrice;
+                            $exitPrice = $ma == 1 ? $sellPrice : $buyPrice;
+                            $profit = round((($exitPrice - $entryPrice) / $entryPrice) * 100, 2);
+
+                            if ($profit > 0) {
+                                $message .= "✅| Profit: $profit%\n";
+                            } else {
+                                $message .= "❌| Loss: " . abs($profit) . "%\n";
+                            }
+
+                            // Check if the maximum number of messages have been sent for the day
+                            $maxMessagesPerDay = 10; // Maximum number of messages to be sent per day
+                            if ($messagesSentToday >= $maxMessagesPerDay) {
+                                error_log("Maximum number of messages for the day has been reached.");
+                                continue;
+                            }
+
+                            // Send the signal message
+                            error_log("Sending the signal message \n");
+                            sendSignal($chatId, $message);
+                            $messagesSentToday++; // Increment the messages sent today counter
+
+                            // Check if the current day is different from the last signal's day
+                            $currentDay = date('Y-m-d'); // Get the current day
+                            $lastSignalDay = date('Y-m-d', $lastSignalTime);
+
+                            if ($currentDay != $lastSignalDay) {
+                                // A new day has begun, reset the messages sent today counter
+                                $messagesSentToday = 0;
+                                $lastSignalTime = time(); // update last signal time
+                            }
+
+                            // Ensure at least 3 messages are sent everyday
+                            if ($messagesSentToday < 3 && date('H') >= 21) { // if it's past 9 PM, and we haven't sent 3 messages
+                                $signalsToSend = 3 - $messagesSentToday;
+                                for ($i = 0; $i < $signalsToSend; $i++) {
+                                    // Create artificial signal message
+                                    $newSignalArtificalMessage = "💰| Pair: #BTCUSDT\n";
+                                    $newSignalArtificalMessage .= "🎫️️️| Entry Zone: Artificial Signal\n";
+                                    $newSignalArtificalMessage .= "———————————————\n";
+                                    $newSignalArtificalMessage .= "📈️️️| Take-Profit Targets: Artificial Signal\n";
+                                    $newSignalArtificalMessage .= "📉️️️| Stop Targets: Artificial Signal\n";
+                                    $newSignalArtificalMessage .= "———————————————\n";
+                                    $newSignalArtificalMessage .= "Period ends at: Artificial Signal ⏰";
+
+                                    // Send the signal message
+                                    echo("Sending the newSignalMessage \n");
+                                    // Call the sendSignal function with the appropriate arguments
+                                    sendSignal($chatId, $newSignalArtificalMessage);
+                                    $messagesSentToday++; // Increment the messages sent today counter
+                                    $lastSignalTime = time(); // update last signal time
+                                }
+                            }
+
+                            // Check if the current day is different from the last signal's day
+                            $currentDay = date('Y-m-d'); // Get the current day
+                            $lastSignalDay = date('Y-m-d', $lastSignalTime);
+
+                            if ($currentDay != $lastSignalDay) {
+                                // A new day has begun, reset the messages sent today counter
+                                $messagesSentToday = 0;
+                                $lastSignalTime = time(); // update last signal time
+                            }
+
+                            // Ensure at least 3 messages are sent everyday
+                            if ($messagesSentToday < 3 && date('H') >= 21) { // if it's past 9 PM and we haven't sent 3 messages
+                                $signalsToSend = 3 - $messagesSentToday;
+                                for ($i = 0; $i < $signalsToSend; $i++) {
+                                    // Create additional signal message based on last known trading data
+                                    $entryZoneStart = round($currentPrice * 0.995, 2);
+                                    $entryZoneEnd = round($currentPrice * 1.005, 2);
+
+                                    $takeProfitTargets = round($currentPrice * (1 + $maxProfitTarget), 2);
+                                    $stopTargets = round($currentPrice * (1 - $minLossTarget), 2);
+
+                                    $endTime = time() + $periodSeconds;
+                                    $endTimeFormatted = date('Y-m-d H:i:s', $endTime); // format end time as a string
+
+                                    $newSignalMessage = "💰| Pair: #BTCUSDT\n";
+                                    $newSignalMessage .= "🎫️️️| Entry Zone: $entryZoneStart - $entryZoneEnd\n";
+                                    $newSignalMessage .= "———————————————\n";
+                                    $newSignalMessage .= "📈️️️| Take-Profit Targets: $takeProfitTargets\n";
+                                    $newSignalMessage .= "📉️️️| Stop Targets: $stopTargets\n";
+                                    $newSignalMessage .= "———————————————\n";
+                                    $newSignalMessage .= "Period ends at: " . $endTimeFormatted . "⏰";
+
+                                    // Send the signal message
+                                    echo("Sending the newSignalMessage \n");
+                                    sendSignal($chatId, $newSignalMessage);
+                                    $messagesSentToday++; // Increment the messages sent today counter
+                                    $lastSignalTime = time(); // update last signal time
+                                }
+                            }
+                        }
+                    } else {
+                        echo "Profit target or loss target condition not met\n";
+                        echo "Max profit target: $maxProfitTarget, Min loss target: $minLossTarget, Min profit threshold: $minProfitThreshold\n";
                     }
+                } else {
+                    echo "Price and moving average condition not met\n";
+                    echo "Current price: $currentPrice, Buy threshold: $buyThreshold, Sell threshold: $sellThreshold\n";
+                    echo "Last short MA: ", $shortSMAValues[count($shortSMAValues) - 1], "\n";
+                    echo "Last long MA: ", $longSMAValues[count($longSMAValues) - 1], "\n";
                 }
+            } else {
+                echo "Short SMA and MA condition not met\n";
+                echo "Last short SMA: ", $shortSMAValues[count($shortSMAValues) - 1], ", MA: $ma\n";
             }
         } else {
-            $details .= "Short MA count: " . count($shortSMAValues) . ", Long MA count: " . count($longSMAValues) . ". ";
-
-            if (isset($shortSMAValues[count($shortSMAValues) - 1])) {
-                $details .= "Last short MA value: " . $shortSMAValues[count($shortSMAValues) - 1] . ". ";
-            }
-
-            if (isset($longSMAValues[count($longSMAValues) - 1])) {
-                $details .= "Last long MA value: " . $longSMAValues[count($longSMAValues) - 1] . ". ";
-            }
-
-            if ($ma == 1 && $currentPrice < $buyThreshold) {
-                $details .= "The current price (" . $currentPrice . ") is below the buy threshold (" . $buyThreshold . "). ";
-            }
-
-            if (!empty($longSMAValues)) {
-                if ($ma == -1 && $currentPrice > $sellThreshold) {
-                    $details .= "The current price (" . $currentPrice . ") is above the sell threshold (" . $sellThreshold . "). ";
-                }
-            }
-
-            if ($maxProfitTarget <= 0 && $minLossTarget >= 0) {
-                $details .= "The target levels do not maximize potential profit or minimize potential loss. ";
-                $details .= "Max profit target: " . $maxProfitTarget . ", Min loss target: " . $minLossTarget . ". ";
-            }
-
-            error_log("Signal not met. Details: " . $details);
+            echo "Short or long SMA count is zero\n";
+            echo "Short SMA count: ", count($shortSMAValues), ", Long SMA count: ", count($longSMAValues), "\n";
         }
+        sleep(60);
     }
-    sleep(60);
 }
 
 

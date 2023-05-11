@@ -65,6 +65,6 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ## Contact
 
-Your Name - [jelmerketelaar487@gmail.com](mailto:jelmerketelaar487@gmail.com)
+Jelmer Ketelaar - [jelmerketelaar487@gmail.com](mailto:jelmerketelaar487@gmail.com)
 
 Project Link: [https://github.com/Jelmer-Ketelaar/CryptoSignalHQ/tree/develop](https://github.com/Jelmer-Ketelaar/CryptoSignalHQ/tree/develop)

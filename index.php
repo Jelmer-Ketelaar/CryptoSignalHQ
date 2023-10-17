@@ -1,4 +1,9 @@
 <?php
+
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 /** @noinspection ALL */
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
@@ -374,7 +379,7 @@ function calculateTradingSignal($prices, $support, $resistance)
     $senkouLength = 52;
 
     $combinedIndicator = null;
-    if (count($prices) >= max($maLength, $macdFastLength, $macdSlowLength, $bbLength, $rsiPeriod, $tenkanLength, $kijunLength, $senkouLength)) {
+        if (count($prices) >= max($maLength, $macdFastLength, $macdSlowLength, $bbLength, $rsiPeriod, $tenkanLength, $kijunLength, $senkouLength)) {
         // Calculate the moving averages
         $ma = array_sum(array_slice($prices, -$maLength)) / $maLength;
 
@@ -509,10 +514,22 @@ $messagesSentToday = 0;
 $loopCounter = 0;
 $lastSignalTime = time();
 $today = date('Y-m-d'); // Keep track of the current day
+
+if ($currentPrice === null) {
+    error_log("Failed to fetch the current price. Retrying in 60 seconds.");
+    sleep(60);
+    continue;
+}
+
 while (true) {
     error_log("Main loop iteration: " . ++$loopCounter); // Log the current iteration
     // Get the current price from the API
     $response = getApiResponseWithExponentialBackoff($apiEndpoint, $apiKey);
+    if (!$response) {
+        error_log("API call failed. Retrying in 60 seconds.");
+        sleep(60);
+        continue;
+    }
     $data = json_decode($response, true);
     $currentPrice = $data['result'][0]['last_price'] ?? null;
 
